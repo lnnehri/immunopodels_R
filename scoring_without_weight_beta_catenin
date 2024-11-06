@@ -1,0 +1,112 @@
+data <- data.frame(
+  group = c(2, 3, 4),
+  CDC37 = c(83.62207367, 72.55524002, 95.0564865), #inducer https://doi.org/10.1074/jbc.M509901200
+  TTLL12 = c(43.16768631, 40.52166547, 75.22269389), #suppressor DOI: 10.4049/jimmunol.1601194
+  YTHDF3 = c(23.49773482, 21.9982308, 44.26385497), #supressor doi: 10.1073/pnas.1812536116
+  STAT1 = c(23.36028099, 36.77186187, 42.0636758), #inducer doi: 10.3390/ijms23084095
+  GIGYF2 = c(11.45123101, 30.74202125, 51.07496156), #supressor doi: 10.1073/pnas.2204539119
+  TBK1 = c(16.19807151, 28.00720837, 46.15027559), #inducer doi: 10.3389/fphar.2022.987979
+  UBE2K = c(42.2690625, 68.49648845, 131.6262063), #inducer  DOI: 10.1016/j.immuni.2014.04.018
+  PTPN1 = c(14.48562999, 28.23645567, 44.40373064),  #inducer doi: 10.1242/jcs.246421.
+  PTPN6 = c(10.79709474, 42.06370144, 73.12735684), #inducer https://doi.org/10.3389/fimmu.2022.913955
+  PTPN11 = c(27.28396181, 146.958827, 82.39956583), #inducer doi: 10.12688/wellcomeopenres.20385.1
+  SHMT2 = c(6.380921727, 26.3154987, 32.27765607), #suppressor http://dx.doi.org/10.1016/j.celrep.2013.08.025
+  MYD88 = c(15.61826713, 19.32404655, 27.1237674), #inducer https://doi.org/10.1038/s41467-018-07384-7
+  RBM47 = c(9.373618358, 15.543749, 30.01944809), #inducer doi: 10.15252/embr.202052205
+  METTL3 = c(20.20754223, 18.15583758, 24.41439563), #suppressor doi: 10.1158/2159-8290.CD-23-0007
+  MAVS = c(10.86393332, 23.81021348, 44.40840838), #inducer doi: 10.1371/journal.ppat.1010272
+  LSM14A = c(23.71853492, 18.66079012, 17.6562744), #inducer doi: 10.1073/pnas.1203405109
+  TRIM56 = c(12.79451584, 18.87856738, 23.97491148), #inducer doi: 10.1128/spectrum.03695-23
+  FADD = c(12.28792954, 23.72200545, 29.64127621), #inducer doi: 10.3389/fvets.2024.1380144
+  SAMHD1 = c(46.17999456, 62.36039185, 73.63850373), #suppressor https://doi.org/10.1073/pnas.1801213115
+  SIN3A = c(6.573563153, 13.8187731, 31.01605609) #suppressor doi: 10.1038/nri3581
+)
+
+data1 <- data.frame(
+  group = c(2, 3, 4),
+  CDC37 = c(27.90950745, 28.32243298, 28.62830085), # inducer
+  TTLL12 = c(27.80355734, 28.44743681, 28.83140994), # suppressor
+  YTHDF3 = c(23.61229435, 24.30043563, 24.87146318), # suppressor
+  STAT1 = c(28.9891657, 29.11531847, 28.9684987), # inducer
+  GIGYF2 = c(27.11545007, 27.33647628, 27.50875982), # suppressor
+  TBK1 = c(23.51522913, 23.70506462, 23.75017018), # inducer
+  UBE2K = c(26.18882778, 26.4966725, 26.72240844), # inducer
+  PTPN1 = c(26.7301417, 26.32305133, 26.88181527), # inducer
+  PTPN6 = c(27.64015688, 28.07594829, 27.89905589), # inducer
+  PTPN11 = c(26.7301417, 26.87638911, 26.88181527), # inducer
+  SHMT2 = c(28.74029956, 29.31587932, 29.72586374), # suppressor
+  MYD88 = c(23.5082752, 24.00305386, 23.7301491), # inducer
+  RBM47 = c(24.46365974, 26.92236759, 27.49562946), # inducer
+  METTL3 = c(23.16319974, 23.57263153, 23.98943478), # suppressor
+  MAVS = c(25.42068053, 26.63995026, 27.11362218), # inducer
+  LSM14A = c(22.83098864, 23.5228806, 23.77756), # inducer
+  TRIM56 = c(23.26722452, 23.73092729, 23.89589916), # inducer
+  FADD = c(25.30192818, 25.74875968, 26.03276148), # inducer
+  SAMHD1 = c(29.72549317, 29.64753204, 29.33914095), # suppressor
+  SIN3A = c(24.54862105, 25.78783124, 26.25456623) # suppressor
+)
+
+data[is.na(data)] <- 0
+# bakiyorum
+print(data)
+
+
+# normalization
+normalize <- function(x) {
+  return((x - min(x)) / (max(x) - min(x)))
+}
+
+normalize1 <- function(x) {
+  return(1 - ((x - min(x)) / (max(x) - min(x))))
+}
+
+#yine bakarsin hangisi inducer hangisi suppressor 
+
+data$normalized_CDC37 <- normalize(data$CDC37) #inducer
+data$normalized_STAT1 <- normalize(data$STAT1) #inducer
+data$normalized_TBK1 <- normalize(data$TBK1) #inducer
+data$normalized_UBE2K <- normalize(data$UBE2K) #inducer
+data$normalized_PTPN1 <- normalize(data$PTPN1) #inducer
+data$normalized_PTPN6 <- normalize(data$PTPN6) #inducer
+data$normalized_PTPN11 <- normalize(data$PTPN11) #inducer
+data$normalized_MYD88 <- normalize(data$MYD88) #inducer
+data$normalized_RBM47 <- normalize(data$RBM47) #inducer
+data$normalized_MAVS <- normalize(data$MAVS) #inducer
+data$normalized_LSM14A <- normalize(data$LSM14A) #inducer
+data$normalized_TRIM56 <- normalize(data$TRIM56) #inducer
+data$normalized_FADD <- normalize(data$FADD) #inducer
+
+
+data$normalized_TTLL12 <- normalize1(data$TTLL12) #suppressor
+data$normalized_YTHDF3 <- normalize1(data$YTHDF3) #supressor
+data$normalized_GIGYF2 <- normalize1(data$GIGYF2) #suppressor
+data$normalized_SHMT2 <- normalize1(data$SHMT2) #suppressor
+data$normalized_METTL3 <- normalize1(data$METTL3) #suppressor
+data$normalized_SAMHD1 <- normalize1(data$SAMHD1) #suppressor 
+data$normalized_SIN3A <- normalize1(data$SIN3A) #suppressor
+
+
+data$Adjusted_Score <- data$normalized_CDC37 + data$normalized_TTLL12 + data$normalized_YTHDF3 + 
+  data$normalized_STAT1 + data$normalized_GIGYF2 + data$normalized_TBK1 + data$normalized_UBE2K + 
+  data$normalized_PTPN1 + data$normalized_PTPN6 + data$normalized_PTPN11 + data$normalized_SHMT2 + 
+  data$normalized_MYD88 + data$normalized_RBM47 + data$normalized_METTL3 + data$normalized_MAVS + 
+  data$normalized_LSM14A + data$normalized_TRIM56 + data$normalized_FADD + 
+  data$normalized_SAMHD1 + data$normalized_SIN3A
+
+
+data$category <- ifelse(data$Adjusted_Score > mean(data$Adjusted_Score), "more Type-1 response", "less Type-1 response")
+print(data)
+
+View(data)
+
+for (i in 1:nrow(data)) {
+  cat("Group:", data$group[i], "\t", 
+      "Category:", data$category[i], "\n")
+}
+
+library('ggplot2')
+ggplot(data, aes(x = group, y = Adjusted_Score, fill = category)) +
+  geom_bar(stat = "identity", position = "stack") +
+  scale_fill_manual(values = c("more Type-1 response" = "red", "less Type-1 response" = "blue")) +
+  labs(x = "Group", y = "Adjusted Score", fill = "Category") +
+  theme_minimal()
