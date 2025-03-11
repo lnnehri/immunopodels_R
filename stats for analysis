@@ -1,0 +1,353 @@
+library(readxl)
+df <- read_excel("C:/Users/lnerk/OneDrive/Belgeler/deneme.xlsx")
+# A ve B grubu hücre hatlarını belirle
+A_grubu <- c("HT29", "C84", "CACO2", "CL11", "CL14", "LS1034", "LS123", "COLO201", 
+             "SW837", "COLO678", "HT115", "NCIH684", "RCM1", "SKCO1", "SNU1033", 
+             "SNU61", "SNU81", "SNUC1", "SW1116")
+
+B_grubu <- c("HT55", "OUMS23", "SW1463", "SNU503", "C80", "COLO320", "SW620", 
+             "SW480", "SW1417")
+
+# A ve B grubuna ait sütunları içeren yeni veri çerçeveleri oluştur
+df_A <- df[, c("cell_line_display_name", A_grubu)]
+df_B <- df[, c("cell_line_display_name", B_grubu)]
+library(tidyverse)
+library(dplyr)
+
+
+#once normal dagiliyor mu dagilmiyor mu buna bakmak gerekiyor
+
+#tum degeler esit olanda (0,0,0,0) error veriyor. o yuzden once sd'ye bakmak gerekiyor
+
+# Her gen için Shapiro-Wilk testi (sadece varyansı sıfır olmayanlar için)
+shapiro_results <- df %>%
+  rowwise() %>%
+  mutate(
+    p_A = ifelse(sd(na.omit(c_across(all_of(A_grubu)))) > 0, 
+                 shapiro.test(na.omit(c_across(all_of(A_grubu))))$p.value, NA),
+    p_B = ifelse(sd(na.omit(c_across(all_of(B_grubu)))) > 0, 
+                 shapiro.test(na.omit(c_across(all_of(B_grubu))))$p.value, NA)
+  ) %>%
+  ungroup()
+
+# Sonuçları göster
+shapiro_results
+
+
+# Kaç gen normal dağılıyor? (p ≥ 0.05 olanlar)
+normal_A <- sum(shapiro_results$p_A >= 0.05, na.rm = TRUE)
+normal_B <- sum(shapiro_results$p_B >= 0.05, na.rm = TRUE)
+
+# Kaç gen normal dağılmıyor? (p < 0.05 olanlar)
+non_normal_A <- sum(shapiro_results$p_A < 0.05, na.rm = TRUE)
+non_normal_B <- sum(shapiro_results$p_B < 0.05, na.rm = TRUE)
+
+# Sonuçları göster
+cat("A grubunda normal dağılan gen sayısı:", normal_A, "\n")
+#A grubunda normal dağılan gen sayısı: 10585
+cat("B grubunda normal dağılan gen sayısı:", normal_B, "\n")
+#B grubunda normal dağılan gen sayısı: 11944 
+cat("A grubunda normal dağılmayan gen sayısı:", non_normal_A, "\n")
+#A grubunda normal dağılmayan gen sayısı: 8067 
+cat("B grubunda normal dağılmayan gen sayısı:", non_normal_B, "\n")
+#B grubunda normal dağılmayan gen sayısı: 6505 
+
+#Eğer hem A hem B normal dağılıyorsa → Bağımsız Örneklem T-Testi
+#Eğer en az bir grup normal değilse → Mann-Whitney U Testi (Wilcoxon Testi)
+
+# Her gen için uygun testi seçip p-value hesaplayalım
+#sonuclari stat_test olarak kaydettiriyoruz
+test_results <- shapiro_results %>%
+  rowwise() %>%
+  mutate(
+    stat_test = ifelse(p_A >= 0.05 & p_B >= 0.05, 
+                       t.test(c_across(all_of(A_grubu)), c_across(all_of(B_grubu)), var.equal = FALSE)$p.value, 
+                       wilcox.test(c_across(all_of(A_grubu)), c_across(all_of(B_grubu)))$p.value)
+  ) %>%
+  ungroup()
+
+# Sonuçları göster
+test_results
+
+#simdi A ve B gruplarinda anlamli farkliiliklar gosteren genleri belirliyoruz
+# p < 0.05 olan genleri seç
+significant_genes <- test_results %>%
+  filter(stat_test < 0.05)
+# p < 0.01 olan genleri seç
+significant_genes_extreme <- test_results %>%
+  filter(stat_test < 0.01)
+# Kaç gen anlamlı farklılık gösteriyor?
+cat("Anlamlı farklılık gösteren gen sayısı:", nrow(significant_genes), "\n")
+#Anlamlı farklılık gösteren gen sayısı: 1529 
+# Kaç gen anlamlı farklılık gösteriyor?
+
+cat("Anlamlı farklılık gösteren gen sayısı:", nrow(significant_genes_extreme), "\n")
+#Anlamlı farklılık gösteren gen sayısı: 386 
+
+#2. Hangi Grubun Daha Yüksek Olduğunu Belirle (Log2 Fold Change - log2FC)
+# A ve B grubu ortalamalarını hesapla (Doğrudan sütun seçerek)
+significant_genes <- significant_genes %>%
+  mutate(
+    A_mean = rowMeans(across(all_of(A_grubu)), na.rm = TRUE),
+    B_mean = rowMeans(across(all_of(B_grubu)), na.rm = TRUE),
+    log2FC = log2(A_mean / B_mean)
+  )
+#p < 0.05 olan genleri sayalım.
+#log2FC değerine göre en büyük farkı gösteren 10 geni listeleyelim.
+
+# Anlamlı farklılık gösteren gen sayısını bul
+num_significant <- nrow(significant_genes)
+#[1] 1529
+# En büyük farkı gösteren 10 geni sırala ve göster
+top_genes <- significant_genes %>%
+  arrange(desc(abs(log2FC))) %>%
+  dplyr::select(cell_line_display_name, A_mean, B_mean, log2FC, stat_test) %>%
+  head(10)
+
+# Sonuçları ekrana yazdır
+cat("Toplam anlamlı farklılık gösteren gen sayısı:", nrow(significant_genes), "\n")
+print(top_genes)
+
+
+#yukarida inf -inf geldi. onu duzelteyim
+
+
+# log2FC hesaplamasını düzenleyelim
+significant_genes <- significant_genes %>%
+  mutate(
+    A_mean_adj = A_mean + 0.0001,  # Küçük sabit ekle
+    B_mean_adj = B_mean + 0.0001,  # Küçük sabit ekle
+    log2FC_adj = log2(A_mean_adj / B_mean_adj)  # Düzeltilmiş log2FC
+  )
+
+# En büyük farkı gösteren 10 gen tekrar listeleyelim
+top_genes_fixed <- significant_genes %>%
+  arrange(desc(abs(log2FC_adj))) %>%
+  select(cell_line_display_name, A_mean, B_mean, log2FC_adj, stat_test) %>%
+  head(10)
+
+print(top_genes_fixed)
+
+
+#log2FC_adj değeri negatif olan genler (örn. TDRD15, RTP1, KCTD8)
+#bunlar→ B grubunda yüksek ekspresyon gösteriyor, A grubunda ekspresyon yok.
+#log2FC_adj değeri pozitif olan genler (örn. SLC10A2)
+#→ A grubunda yüksek ekspresyon gösteriyor, B grubunda ekspresyon yok.
+
+
+library(ggplot2)
+#X ekseni (log2FC_adj) → A ve B grubu arasındaki log2 Fold Change farkını gösterir.
+#Pozitif değerler: A grubunda daha yüksek ekspresyon
+#Negatif değerler: B grubunda daha yüksek ekspresyon
+#Y ekseni (-log10(stat_test)) → İstatistiksel testin p-değerinin -log10 dönüşümünü gösterir.
+#Yüksek değerler: Daha güçlü istatistiksel anlamlılık (daha küçük p-değer)
+#Düşük değerler: Daha az anlamlı fark
+#Renkler (scale_color_manual)
+#Kırmızı ("red") → p < 0.05 ve |log2FC| > 1 olan genler
+#Gri ("gray") → Anlamlı olmayan genler
+#Merkeze yakın genler → A ve B arasında büyük bir fark yok.
+#Sağ üst köşede genler → A grubunda çok daha yüksek ekspresyon gösteren genler.
+#Sol üst köşede genler → B grubunda çok daha yüksek ekspresyon gösteren genler.
+
+ggplot(significant_genes, aes(x = log2FC_adj, y = -log10(stat_test))) +
+  geom_point(aes(color = (stat_test < 0.05 & abs(log2FC_adj) > 1)), alpha = 0.7) +
+  scale_color_manual(values = c("gray", "red")) +
+  labs(title = "Volcano Plot", x = "log2(Fold Change)", y = "-log10(p-value)") +
+  theme_minimal()
+
+#simdi bunu p_adj<0.01 icin tekrar yapcam:
+#log2FC_adj değeri negatif olan genler (örn. KCTD8, TRIM51, UBE2U, FOXG1)
+#→ B grubunda yüksek ekspresyon gösteriyor, A grubunda ekspresyon yok veya çok düşük.
+#log2FC_adj değeri pozitif olan genler (örn. FAM71A, CGAS)
+#→ A grubunda yüksek ekspresyon gösteriyor, B grubunda ekspresyon yok veya çok düşük.
+# En büyük farkı gösteren 10 geni tekrar listeleyelim
+top_genes_fixed_extreme <- significant_genes_extreme %>%
+  arrange(desc(abs(log2FC_adj))) %>%
+  dplyr::select(cell_line_display_name, A_mean, B_mean, log2FC_adj, stat_test) %>%
+  head(10)
+
+# Sonuçları ekrana yazdır
+print(top_genes_fixed_extreme)
+
+#<0.01 icin 
+#library(ggplot2)
+
+ggplot(significant_genes_extreme, aes(x = log2FC_adj, y = -log10(stat_test))) +
+  geom_point(aes(color = (stat_test < 0.01 & abs(log2FC_adj) > 1)), alpha = 0.7) +
+  scale_color_manual(values = c("gray", "red")) +
+  labs(title = "Volcano Plot (p < 0.01)", x = "log2(Fold Change)", y = "-log10(p-value)") +
+  theme_minimal()
+
+
+# İki gruptaki gen isimlerini al
+genes_05 <- significant_genes$cell_line_display_name
+genes_01 <- significant_genes_extreme$cell_line_display_name
+
+# Ortak olan genleri bul
+common_genes <- intersect(genes_05, genes_01)
+
+# Ortak gen sayısını göster
+cat("Ortak gen sayısı:", length(common_genes), "\n")
+
+# Ortak genleri göster (ilk 10 tanesi)
+head(common_genes, 10)
+
+
+#significant_genes → p < 0.05 olan genleri içeriyor.
+#significant_genes_extreme → p < 0.01 olan genleri içeriyor.
+
+#simdilik sadece p value uzerinden significan genleri belirledik.
+#Küçük p-değeri, farkın istatistiksel olarak anlamlı olduğunu gösterir ama bu farkın biyolojik olarak önemli olup olmadığını söylemez.
+
+# P-değerlerini FDR ile düzeltelim (Benjamini-Hochberg yöntemi)
+significant_genes <- significant_genes %>%
+  mutate(p_adjust = p.adjust(stat_test, method = "BH"))
+
+# FDR < 0.05 olan genleri seçelim
+significant_genes_fdr <- significant_genes %>%
+  filter(p_adjust < 0.05 & abs(log2FC_adj) > 1)
+
+# Kaç gen FDR < 0.05 ve log2FC > 1 kriterine uyuyor?
+cat("FDR < 0.05 ve |log2FC| > 1 olan gen sayısı:", nrow(significant_genes_fdr), "\n")
+#FDR < 0.05 ve |log2FC| > 1 olan gen sayısı: 523 
+
+# p < 0.05 ile bulunan genlerin isimlerini al
+genes_pval <- significant_genes$cell_line_display_name
+
+# FDR < 0.05 ve |log2FC| > 1 olan genlerin isimlerini al
+genes_fdr <- significant_genes_fdr$cell_line_display_name
+
+# Ortak olan genleri bul
+common_genes_fdr_pval <- intersect(genes_pval, genes_fdr)
+
+# Kaç gen ortak?
+cat("Hem p < 0.05 hem de FDR < 0.05 & |log2FC| > 1 olan gen sayısı:", length(common_genes_fdr_pval), "\n")
+
+# Ortak genleri göster (ilk 10 tanesi)
+head(common_genes_fdr_pval, 10)
+
+
+#####
+# p < 0.01 ile bulunan genlerin isimlerini al
+genes_pval_01 <- significant_genes_extreme$cell_line_display_name
+
+# FDR < 0.05 ve |log2FC| > 1 olan genlerin isimlerini al
+genes_fdr <- significant_genes_fdr$cell_line_display_name
+
+# Ortak olan genleri bul
+common_genes_fdr_pval_01 <- intersect(genes_pval_01, genes_fdr)
+
+# Kaç gen ortak?
+cat("Hem p < 0.01 hem de FDR < 0.05 & |log2FC| > 1 olan gen sayısı:", length(common_genes_fdr_pval_01), "\n")
+
+# Ortak genleri göster (ilk 10 tanesi)
+head(common_genes_fdr_pval_01, 10)
+
+#p< 0.01 ile bulunan gen sayısı: 386
+#FDR < 0.05 & |log2FC| > 1 ile bulunan gen sayısı: 523
+#Hem p < 0.01 hem de FDR < 0.05 & |log2FC| > 1 olan gen sayısı: 161
+# FDR, yanlış pozitifleri elemeye yardımcı oldu.
+
+#p < 0.01 olan 386 genden sadece 161 tanesi FDR < 0.05 ve |log2FC| > 1 kriterini sağlıyor.
+#Bu 161 gen, hem istatistiksel hem de biyolojik olarak en anlamlı genler.
+#FDR sayesinde 225 gen (386 - 161) yanlış pozitif olma ihtimaliyle elendi.
+
+#Şimdi elimizde en güvenilir 161 gen var (FDR < 0.05 ve |log2FC| > 1 olan genler).
+cat("Hem p < 0.01 hem de FDR < 0.05 & |log2FC| > 1 olan toplam gen sayısı:", length(common_genes_fdr_pval_01), "\n")
+# Ortak genleri içeren veriyi filtreleyelim
+common_genes_data <- significant_genes_fdr %>%
+  filter(cell_line_display_name %in% common_genes_fdr_pval_01)
+
+# CSV dosyası olarak kaydet
+write.csv(common_genes_data, "common_genes_fdr_pval_01.csv", row.names = FALSE)
+
+cat("Dosya başarıyla kaydedildi: common_genes_fdr_pval_01.csv\n")
+
+library(clusterProfiler)
+table(common_genes_data$stat_test < 0.01 & abs(common_genes_data$log2FC_adj) > 1)
+
+#significant genler icin bir volcano plot cizdiriyorum 161 gen icin:
+
+common_genes_data <- common_genes_data %>%
+  mutate(significance = case_when(
+    stat_test < 0.01 & abs(log2FC_adj) > 2 ~ "Highly Significant",
+    stat_test < 0.01 & abs(log2FC_adj) > 1 ~ "Significant",
+    TRUE ~ "Not Significant"
+  ))
+
+ggplot(common_genes_data, aes(x = log2FC_adj, y = -log10(stat_test))) +
+  geom_point(aes(color = significance), alpha = 0.7) +
+  scale_color_manual(values = c("Highly Significant" = "red", "Significant" = "orange", "Not Significant" = "gray")) +
+  labs(title = "Volcano Plot of Significant Genes",
+       x = "log2(Fold Change)", 
+       y = "-log10(p-value)",
+       color = "Significance") +
+  geom_hline(yintercept = -log10(0.01), linetype = "dashed", color = "red") +  # P-value threshold
+  geom_vline(xintercept = c(-1, 1), linetype = "dashed", color = "blue") +  # Fold change threshold
+  theme_minimal()
+library(pheatmap)
+library(ggfortify)
+#library(ggplot2)
+common_genes_data <- common_genes_data %>%
+  mutate(cell_line_display_name = toupper(trimws(cell_line_display_name)))
+
+A_grubu <- toupper(trimws(A_grubu))
+B_grubu <- toupper(trimws(B_grubu))
+
+
+#sorun cikti A ve B gruplarinda
+library(tidyr)
+library(ggplot2)
+
+# Veriyi uzun formata getir (gene expression değerlerini bir sütunda topla)
+common_genes_data_long <- common_genes_data %>%
+  pivot_longer(cols = all_of(c(A_grubu, B_grubu)), names_to = "cell_line", values_to = "expression")
+
+# A ve B gruplarını doğru şekilde ata
+common_genes_data_long <- common_genes_data_long %>%
+  mutate(group = ifelse(cell_line %in% A_grubu, "A", "B"))
+
+# Boxplot çiz
+ggplot(common_genes_data_long, aes(x = group, y = expression)) +
+  geom_boxplot(fill = "lightblue", color = "black") +
+  labs(title = "Gene Expression in A and B Groups", x = "Group", y = "Expression Level") +
+  theme_minimal()
+
+
+#This boxplot shows that genes in Group A have higher expression levels compared to Group B. The median expression in Group A is significantly higher, with a broader distribution and many outliers, indicating that some genes are highly expressed. In contrast, Group B genes have lower and more compact expression levels, with fewer high-expression outliers.
+
+#This suggests that genes in Group A are more active, likely in the cGAS+ condition, while genes in Group B are downregulated, potentially in the cGAS-deficient state. The clear separation between groups supports the significance of the 161 differentially expressed genes.
+
+
+# Wilcoxon rank-sum testini her gen için uygula
+wilcox_results <- common_genes_data %>%
+  rowwise() %>%
+  mutate(wilcox_p_value = wilcox.test(
+    c_across(all_of(A_grubu)),
+    c_across(all_of(B_grubu)),
+    exact = FALSE # Büyük veri setleri için
+  )$p.value) %>%
+  ungroup()
+
+# p < 0.05 olan genleri filtreleyelim
+significant_wilcox_genes <- wilcox_results %>%
+  filter(wilcox_p_value < 0.05)
+
+# Kaç gen anlamlı farklılık gösteriyor?
+cat("Wilcoxon testi sonucu anlamlı farklılık gösteren gen sayısı:", nrow(significant_wilcox_genes), "\n")
+#Wilcoxon testi sonucu anlamlı farklılık gösteren gen sayısı: 161 
+library(pheatmap)
+class(common_genes_data)
+dim(common_genes_data)
+str(common_genes_data)
+common_genes_data <- as.data.frame(common_genes_data)
+selected_data <- common_genes_data[, c(A_grubu, B_grubu)]
+#asagidan bos liste alirsan kolon isimleri uyumlu
+setdiff(A_grubu, colnames(common_genes_data))  # A_grubu içinde olup common_genes_data içinde olmayanlar
+setdiff(B_grubu, colnames(common_genes_data))  # B_grubu içinde olup common_genes_data içinde olmayanlar
+
+# Veriyi matriks formatına çevirelim (pheatmap için gerekli)
+heatmap_data <- as.matrix(selected_data)
+
+# Satır isimlerini gen isimleri yapalım
+rownames(heatmap_data) <- common_genes_data$cell_line_display_name
